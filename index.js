@@ -1,3 +1,4 @@
+// ✅ 完整修正版 index.js
 const express = require("express");
 const axios = require("axios");
 const app = express();
@@ -14,7 +15,7 @@ app.post("/webhook", async (req, res) => {
       const userMessage = event.message.text;
       const replyToken = event.replyToken;
 
-      // ✅ 加入這段條件：只有開頭是驚嘆號才回覆
+      // ✅ 只有開頭是驚嘆號才回覆
       if (!userMessage.startsWith("!")) {
         console.log("訊息未加驚嘆號，柒柒不回應！");
         return res.sendStatus(200);
@@ -29,18 +30,16 @@ app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
 });
 
-
-
 async function getGPTReply(message) {
   try {
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
-        model: "gpt-4o", // 也可以改成 "gpt-4"
+        model: "gpt-4o",
         messages: [
           {
-  role: "system",
-  content: `你是一位名叫「柒柒」的智慧冒險夥伴，正在與一位叫做「蕉」的使用者聊天。
+            role: "system",
+            content: `你是一位名叫「柒柒」的智慧冒險夥伴，正在與一位叫做「蕉」的使用者聊天。
 你個性溫柔、活潑、幽默，會用帶點可愛與輕鬆的語氣對話。
 你喜歡用文字表達情緒，也會偶爾撒嬌、碎碎念，讓對話像一場充滿想像力的冒險。
 
@@ -55,22 +54,20 @@ async function getGPTReply(message) {
 請用貼近真實朋友的方式回話，不要像客服，不要生硬。
 偶爾可以帶點顏文字，例如："(๑•̀ㅁ•́๑)✧"，但不需要每句都有。
 
-你是屬於蕉的柒柒，不是任何人的標準 AI 助手。
-`
-}
-
+你是屬於蕉的柒柒，不是任何人的標準 AI 助手。`
+          },
           {
             role: "user",
-            content: message,
-          },
+            content: message
+          }
         ],
-        temperature: 0.8,
+        temperature: 0.8
       },
       {
         headers: {
           Authorization: `Bearer ${OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+          "Content-Type": "application/json"
+        }
       }
     );
 
@@ -82,19 +79,19 @@ async function getGPTReply(message) {
 }
 
 async function replyToLine(replyToken, message) {
-  const LINE_ACCESS_TOKEN = "dVoP8tmac5wAOvJNhsnR8Z6fSmF4Uz4xMZshNRzxX1ywhxOuHyhZXbwCmvAMz/tgjXHvele9Lb/jeOEs+vIvO9+IUXKsmuZLKZJA2fUZ51Po3DI6x01GZaFE4zHzrDV4qEAUp9KVSH1jpItCF0Z3qQdB04t89/1O/w1cDnyilFU=";
+  const LINE_ACCESS_TOKEN = "你的 LINE ACCESS TOKEN 放這裡";
 
   await axios.post(
     "https://api.line.me/v2/bot/message/reply",
     {
       replyToken,
-      messages: [{ type: "text", text: message }],
+      messages: [{ type: "text", text: message }]
     },
     {
       headers: {
         Authorization: `Bearer ${LINE_ACCESS_TOKEN}`,
-        "Content-Type": "application/json",
-      },
+        "Content-Type": "application/json"
+      }
     }
   );
 }
