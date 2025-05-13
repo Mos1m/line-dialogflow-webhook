@@ -79,7 +79,7 @@ async function getGPTReply(message) {
 }
 
 async function replyToLine(replyToken, message) {
-  const LINE_ACCESS_TOKEN = "你的 LINE ACCESS TOKEN 放這裡";
+  const LINE_ACCESS_TOKEN = "dVoP8tmac5wAOvJNhsnR8Z6fSmF4Uz4xMZshNRzxX1ywhxOuHyhZXbwCmvAMz/tgjXHvele9Lb/jeOEs+vIvO9+IUXKsmuZLKZJA2fUZ51Po3DI6x01GZaFE4zHzrDV4qEAUp9KVSH1jpItCF0Z3qQdB04t89/1O/w1cDnyilFU=";
 
   await axios.post(
     "https://api.line.me/v2/bot/message/reply",
