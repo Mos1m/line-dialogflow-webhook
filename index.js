@@ -5,7 +5,7 @@ const app = express();
 
 app.use(express.json());
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
 
 app.post("/webhook", async (req, res) => {
   const events = req.body.events;
