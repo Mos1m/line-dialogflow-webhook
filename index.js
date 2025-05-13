@@ -29,8 +29,7 @@ app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
 });
 
-  res.sendStatus(200);
-});
+
 
 async function getGPTReply(message) {
   try {
