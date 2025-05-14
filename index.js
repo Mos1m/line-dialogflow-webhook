@@ -1,4 +1,4 @@
-// ✅ 升級版 index.js：支援使用者 ID + scope 記憶與 Supabase
+// ✅ 支援群組識別與記憶的新 index.js
 const express = require("express");
 const axios = require("axios");
 const app = express();
@@ -9,6 +9,16 @@ app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN?.trim();
 
+// 🔧 建立 senderKey 與 scope，用於分辨私訊/群組來源
+function getSenderKey(source) {
+  if (source.type === "user") {
+    return { key: source.userId, scope: "private" };
+  }
+  const scope = source.groupId || source.roomId || "unknown";
+  const userId = source.userId || "anonymous";
+  return { key: `${scope}:${userId}`, scope };
+}
+
 app.post("/webhook", async (req, res) => {
   const events = req.body.events;
 
@@ -17,21 +27,20 @@ app.post("/webhook", async (req, res) => {
       const rawMessage = event.message.text;
       const userMessage = rawMessage.trim();
       const replyToken = event.replyToken;
+      const source = event.source;
 
-      // 取得使用者 ID 與聊天室範圍（scope）
-      const senderId = event.source.userId || "unknown";
-      const scope = event.source.groupId || event.source.roomId || "private";
+      const { key: senderKey, scope } = getSenderKey(source);
 
       // ✅ 暱稱註冊邏輯：格式為「我是小明」
       if (/^我是(.{1,10})$/.test(userMessage)) {
         const nickname = userMessage.match(/^我是(.{1,10})$/)[1];
-        await memoryManager.saveNickname(senderId, scope, nickname);
+        await memoryManager.saveNickname(senderKey, scope, nickname);
         await replyToLine(replyToken, `記住你是「${nickname}」囉！之後我都會這樣叫你的✨`);
         return res.sendStatus(200);
       }
 
       // ✅ 群組 vs 私聊的觸發條件
-      if (event.source.type === "group" || event.source.type === "room") {
+      if (source.type === "group" || source.type === "room") {
         if (!userMessage.startsWith("!")) {
           console.log("群組中未加驚嘆號，不觸發回應。");
           return res.sendStatus(200);
@@ -39,8 +48,8 @@ app.post("/webhook", async (req, res) => {
       }
 
       const cleanedMessage = userMessage.startsWith("!") ? userMessage.slice(1).trim() : userMessage;
-      const nickname = await memoryManager.getNickname(senderId, scope);
-      const reply = await getGPTReply(cleanedMessage, nickname, senderId);
+      const nickname = await memoryManager.getNickname(senderKey, scope);
+      const reply = await getGPTReply(cleanedMessage, nickname, senderKey);
       await replyToLine(replyToken, reply);
     }
   }
@@ -64,14 +73,8 @@ async function getGPTReply(message, nickname, senderId) {
       {
         model: "gpt-4o",
         messages: [
-          {
-            role: "system",
-            content: systemPrompt
-          },
-          {
-            role: "user",
-            content: message
-          }
+          { role: "system", content: systemPrompt },
+          { role: "user", content: message }
         ],
         temperature: 0.8
       },
