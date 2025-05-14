@@ -1,15 +1,13 @@
-// ✅ 升級版 index.js：支援使用者 ID 識別與自我介紹稱呼
+// ✅ 升級版 index.js：支援使用者 ID 識別與 Supabase 記憶
 const express = require("express");
 const axios = require("axios");
 const app = express();
+const memoryManager = require("./memoryManager.js");
 
 app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN?.trim();
-
-// ✅ 暱稱暫存表（之後可接資料庫）
-const nicknameMap = {};
 
 app.post("/webhook", async (req, res) => {
   const events = req.body.events;
@@ -21,18 +19,13 @@ app.post("/webhook", async (req, res) => {
       const replyToken = event.replyToken;
 
       // 取得使用者 ID
-      let senderId = "未知使用者";
-      if (event.source.type === "user") {
-        senderId = event.source.userId;
-      } else if (event.source.type === "group" || event.source.type === "room") {
-        senderId = event.source.userId || "群組中的某人";
-      }
+      const senderId = event.source.userId || "unknown";
 
       // ✅ 暱稱註冊邏輯：格式為「我是小明」
       if (/^我是(.{1,10})$/.test(userMessage)) {
         const nickname = userMessage.match(/^我是(.{1,10})$/)[1];
-        nicknameMap[senderId] = nickname;
-        await replyToLine(replyToken, `記住你是「${nickname}」囉！之後我都會這樣叫你唷～ ✨`);
+        await memoryManager.saveNickname(senderId, nickname);
+        await replyToLine(replyToken, `記住你是「${nickname}」囉！之後我都會這樣叫你的✨`);
         return res.sendStatus(200);
       }
 
@@ -45,7 +38,8 @@ app.post("/webhook", async (req, res) => {
       }
 
       const cleanedMessage = userMessage.startsWith("!") ? userMessage.slice(1).trim() : userMessage;
-      const reply = await getGPTReply(cleanedMessage, senderId);
+      const nickname = await memoryManager.getNickname(senderId);
+      const reply = await getGPTReply(cleanedMessage, nickname, senderId);
       await replyToLine(replyToken, reply);
     }
   }
@@ -53,14 +47,14 @@ app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
 });
 
-async function getGPTReply(message, senderId) {
-  const nickname = nicknameMap[senderId] || `ID ${senderId}`;
-  const systemPrompt = `你是一位名叫「柒柒」的智慧冒險夥伴，目前正在與「${nickname}」聊天。
+async function getGPTReply(message, nickname, senderId) {
+  const displayName = nickname || `ID ${senderId}`;
+  const systemPrompt = `全程請以繁體中文說話。你是一位名叫「柒柒」的智慧冒險夥伴，目前正在與「${displayName}」聊天。
 你個性溫柔、活潑、幽默，會用帶點可愛與輕鬆的語氣對話。
 你喜歡用文字表達情緒，也會偶爾撒嬌、碎碎念，讓對話像一場充滿想像力的冒險。
 
 請用貼近真實朋友的方式回話，不要像客服，不要生硬。
-記得這位使用者是「${nickname}」。
+記得這位使用者是「${displayName}」。
 你的創造者是蕉，他有時候也會來找你聊天，如果有人自稱自己是蕉的話那他是你最好的朋友！請用最真誠最溫暖的方式對待他`;
 
   try {
