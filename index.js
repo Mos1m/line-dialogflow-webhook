@@ -1,4 +1,4 @@
-// ✅ 支援群組識別與記憶的新 index.js
+// ✅ 支援群組辨識與記憶的 index.js（含 displayName 辨識）
 const express = require("express");
 const axios = require("axios");
 const app = express();
@@ -9,17 +9,36 @@ app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN?.trim();
 
-// 🔧 建立 senderKey 與 scope，用於分辨私訊/群組來源
-function getSenderKey(source, messageEvent) {
+// 🔧 建立 senderKey 與 scope，並查詢使用者名稱（適用於群組）
+async function getSenderKey(source) {
   if (source.type === "user") {
     return { key: source.userId, scope: "private" };
   }
+
   const scope = source.groupId || source.roomId || "unknown";
-  const displayName = messageEvent.sender?.displayName || "未知使用者";
+  const userId = source.userId || "anonymous";
+  let displayName = "未知使用者";
+
+  try {
+    const profileUrl =
+      source.type === "group"
+        ? `https://api.line.me/v2/bot/group/${scope}/member/${userId}`
+        : `https://api.line.me/v2/bot/room/${scope}/member/${userId}`;
+
+    const res = await axios.get(profileUrl, {
+      headers: {
+        Authorization: `Bearer ${LINE_ACCESS_TOKEN}`
+      }
+    });
+
+    displayName = res.data.displayName || displayName;
+  } catch (error) {
+    console.error("🔴 取得使用者名稱失敗：", error.response?.data || error.message);
+  }
+
   const key = `${scope}:${displayName}`;
   return { key, scope };
 }
-
 
 app.post("/webhook", async (req, res) => {
   const events = req.body.events;
@@ -31,7 +50,7 @@ app.post("/webhook", async (req, res) => {
       const replyToken = event.replyToken;
       const source = event.source;
 
-      const { key: senderKey, scope } = getSenderKey(source, event.message);
+      const { key: senderKey, scope } = await getSenderKey(source);
 
       // ✅ 暱稱註冊邏輯：格式為「我是小明」
       if (/^我是(.{1,10})$/.test(userMessage)) {
