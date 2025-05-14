@@ -10,14 +10,16 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN?.trim();
 
 // 🔧 建立 senderKey 與 scope，用於分辨私訊/群組來源
-function getSenderKey(source) {
+function getSenderKey(source, messageEvent) {
   if (source.type === "user") {
     return { key: source.userId, scope: "private" };
   }
   const scope = source.groupId || source.roomId || "unknown";
-  const userId = source.userId || "anonymous";
-  return { key: `${scope}:${userId}`, scope };
+  const displayName = messageEvent.sender?.displayName || "未知使用者";
+  const key = `${scope}:${displayName}`;
+  return { key, scope };
 }
+
 
 app.post("/webhook", async (req, res) => {
   const events = req.body.events;
@@ -29,7 +31,7 @@ app.post("/webhook", async (req, res) => {
       const replyToken = event.replyToken;
       const source = event.source;
 
-      const { key: senderKey, scope } = getSenderKey(source);
+      const { key: senderKey, scope } = getSenderKey(source, event.message);
 
       // ✅ 暱稱註冊邏輯：格式為「我是小明」
       if (/^我是(.{1,10})$/.test(userMessage)) {
