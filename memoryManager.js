@@ -24,7 +24,7 @@ async function getNickname(senderId, scope) {
     .select("nickname")
     .eq("sender_id", senderId)
     .eq("scope", scope)
-    .maybeSingle(); // 注意大小寫
+    .maybeSingle();
 
   if (error) {
     console.error("🔴 讀取暱稱失敗:", error);
