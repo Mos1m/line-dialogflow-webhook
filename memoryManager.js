@@ -6,8 +6,8 @@ async function saveNickname(senderId, scope, nickname) {
     .from("user_log")
     .upsert(
       {
-        sender_id: senderId,
-        scope: scope,
+        sender_id: senderId,     // ex: Cxxx:William
+        scope: scope,            // ex: Cxxx
         nickname: nickname,
         updated_at: new Date().toISOString()
       },
