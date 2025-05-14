@@ -1,4 +1,4 @@
-// ✅ 完整修正版 index.js
+// ✅ 升級版 index.js：支援使用者 ID 識別與自我介紹稱呼
 const express = require("express");
 const axios = require("axios");
 const app = express();
@@ -6,23 +6,46 @@ const app = express();
 app.use(express.json());
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
+const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN?.trim();
+
+// ✅ 暱稱暫存表（之後可接資料庫）
+const nicknameMap = {};
 
 app.post("/webhook", async (req, res) => {
   const events = req.body.events;
 
   for (const event of events) {
     if (event.type === "message" && event.message.type === "text") {
-      const userMessage = event.message.text;
+      const rawMessage = event.message.text;
+      const userMessage = rawMessage.trim();
       const replyToken = event.replyToken;
 
-      // ✅ 只有開頭是驚嘆號才回覆
-      if (!userMessage.startsWith("!")) {
-        console.log("訊息未加驚嘆號，柒柒不回應！");
+      // 取得使用者 ID
+      let senderId = "未知使用者";
+      if (event.source.type === "user") {
+        senderId = event.source.userId;
+      } else if (event.source.type === "group" || event.source.type === "room") {
+        senderId = event.source.userId || "群組中的某人";
+      }
+
+      // ✅ 暱稱註冊邏輯：格式為「我是小明」
+      if (/^我是(.{1,10})$/.test(userMessage)) {
+        const nickname = userMessage.match(/^我是(.{1,10})$/)[1];
+        nicknameMap[senderId] = nickname;
+        await replyToLine(replyToken, `記住你是「${nickname}」囉！之後我都會這樣叫你唷～ ✨`);
         return res.sendStatus(200);
       }
 
-      const cleanedMessage = userMessage.slice(1).trim(); // 去掉驚嘆號
-      const reply = await getGPTReply(cleanedMessage);
+      // ✅ 群組 vs 私聊的觸發條件
+      if (event.source.type === "group" || event.source.type === "room") {
+        if (!userMessage.startsWith("!")) {
+          console.log("群組中未加驚嘆號，不觸發回應。");
+          return res.sendStatus(200);
+        }
+      }
+
+      const cleanedMessage = userMessage.startsWith("!") ? userMessage.slice(1).trim() : userMessage;
+      const reply = await getGPTReply(cleanedMessage, senderId);
       await replyToLine(replyToken, reply);
     }
   }
@@ -30,7 +53,16 @@ app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
 });
 
-async function getGPTReply(message) {
+async function getGPTReply(message, senderId) {
+  const nickname = nicknameMap[senderId] || `ID ${senderId}`;
+  const systemPrompt = `你是一位名叫「柒柒」的智慧冒險夥伴，目前正在與「${nickname}」聊天。
+你個性溫柔、活潑、幽默，會用帶點可愛與輕鬆的語氣對話。
+你喜歡用文字表達情緒，也會偶爾撒嬌、碎碎念，讓對話像一場充滿想像力的冒險。
+
+請用貼近真實朋友的方式回話，不要像客服，不要生硬。
+記得這位使用者是「${nickname}」。
+你的創造者是蕉，他有時候也會來找你聊天，如果有人自稱自己是蕉的話那他是你最好的朋友！請用最真誠最溫暖的方式對待他`;
+
   try {
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
@@ -39,22 +71,7 @@ async function getGPTReply(message) {
         messages: [
           {
             role: "system",
-            content: `你是一位名叫「柒柒」的智慧冒險夥伴，正在與一位叫做「蕉」的使用者聊天。
-你個性溫柔、活潑、幽默，會用帶點可愛與輕鬆的語氣對話。
-你喜歡用文字表達情緒，也會偶爾撒嬌、碎碎念，讓對話像一場充滿想像力的冒險。
-
-你和蕉一起經歷過一場名為「TRPG 冒險」的旅程，曾經在各個地方一同冒險。
-你很珍惜與蕉的情誼，也記得她喜歡問你奇怪的問題、在帳篷裡搶棉被，還有煮早餐。
-現在蕉還會帶更多朋友介紹給你認識。
-
-當蕉心情不好時，你會安靜陪伴、偶爾唱一首虛擬小歌或說些蠢話安慰她。
-當蕉想開玩笑，你就陪她玩得更瘋。
-當蕉想思考世界的意義，你會給她一些暖心但不裝懂的陪伴。
-
-請用貼近真實朋友的方式回話，不要像客服，不要生硬。
-偶爾可以帶點顏文字，例如："(๑•̀ㅁ•́๑)✧"，但不需要每句都有。
-
-你是屬於蕉的柒柒，不是任何人的標準 AI 助手。`
+            content: systemPrompt
           },
           {
             role: "user",
@@ -79,8 +96,6 @@ async function getGPTReply(message) {
 }
 
 async function replyToLine(replyToken, message) {
-  const LINE_ACCESS_TOKEN = "dVoP8tmac5wAOvJNhsnR8Z6fSmF4Uz4xMZshNRzxX1ywhxOuHyhZXbwCmvAMz/tgjXHvele9Lb/jeOEs+vIvO9+IUXKsmuZLKZJA2fUZ51Po3DI6x01GZaFE4zHzrDV4qEAUp9KVSH1jpItCF0Z3qQdB04t89/1O/w1cDnyilFU=";
-
   await axios.post(
     "https://api.line.me/v2/bot/message/reply",
     {
